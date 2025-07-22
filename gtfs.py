@@ -158,7 +158,7 @@ class GTFS:
                 stop_id = row[0]
                 stop_name = row[2]
                 # some stops (in Northern Ireland) don't have a stop code. Use the stop_id instead.
-                stop_number = row[1] or row[0]
+                stop_number = row[1] if row[1] != '0' else row[0]
                 self.store.set('stop', stop_id, stop_number)
                 self.store.set('stop_names', stop_number, stop_name)
                 self.store.add('stop_numbers', stop_number)
