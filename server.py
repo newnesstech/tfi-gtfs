@@ -288,7 +288,10 @@ if __name__ == "__main__":
         return arrivals
 
     # serve a basic static page with a link to /api/v1/arrivals at the root
-    @app.route('/')
+@app.route("/healthz")
+def healthz():
+    return "ok", 200
+
     def index():
         return """
         <html>
@@ -310,3 +313,7 @@ if __name__ == "__main__":
     else:
         print(f"Waiting for requests on http://{args.host}:{args.port}")
         waitress.serve(app, host=args.host, port=args.port, threads=args.workers)
+if __name__ == "__main__":
+    import os
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)
