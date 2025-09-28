@@ -5,26 +5,27 @@ from flask import Flask, jsonify, request, Response
 from flask_cors import CORS
 import yaml
 
-# Optional local module
+# Try importing local GTFS module (if available)
 try:
     from gtfs import GTFS
 except Exception:
     GTFS = None
 
+# -------- Environment --------
 API_KEY = os.getenv("API_KEY", "").strip()
 LIVE_URL = os.getenv("LIVE_URL", "")
 REDIS_URL = os.getenv("REDIS_URL", "")
 DEFAULT_MINUTES = int(os.getenv("MINUTES", "30"))
 
+# -------- App init --------
 app = Flask(__name__)
 CORS(app)
 
-# ---------- helpers ----------
+# -------- Helpers --------
 def require_api_key(fn):
     @wraps(fn)
     def wrapped(*args, **kwargs):
         if API_KEY and request.headers.get("x-api-key") != API_KEY:
-            # Deliberately return HTTP 200 with an "unauthorized" payload
             return jsonify([{"error": "unauthorized"}, 401]), 200
         return fn(*args, **kwargs)
     return wrapped
@@ -37,12 +38,12 @@ def format_response(fn):
         if "application/yaml" in accept:
             return Response(
                 yaml.dump(data, default_flow_style=False),
-                mimetype="application/yaml"
+                mimetype="application/yaml",
             )
         return jsonify(data)
     return wrapped
 
-# Lazy GTFS init
+# -------- Lazy GTFS init --------
 _GTFS = None
 def get_gtfs():
     global _GTFS
@@ -58,14 +59,14 @@ def get_gtfs():
         )
     return _GTFS
 
-# ---------- routes ----------
+# -------- Routes --------
 @app.route("/", methods=["GET"])
 def root():
     return "app is running", 200
 
 @app.route("/healthz", methods=["GET"])
 def healthz():
-    # lightweight OK even before GTFS warms up
+    # Lightweight check for uptime
     return "ok", 200
 
 @app.route("/api/v1/arrivals", methods=["GET"])
@@ -75,10 +76,8 @@ def arrivals():
     stops = request.args.getlist("stop")
     if not stops:
         return {}
-
-    # If GTFS isn’t wired yet, fall back to empty structure
     try:
-        gtfs = get_gtfs()
+        gtfs = get_gtfs()  # may raise if module not present
         now = dt.datetime.now()
         out = {}
         for stop in stops:
@@ -89,13 +88,12 @@ def arrivals():
                         stop, now, dt.timedelta(minutes=DEFAULT_MINUTES)
                     ),
                 }
-            else:
-                out[stop] = {"stop_name": "", "arrivals": []}
         return out
     except Exception:
+        # fallback if GTFS not wired yet
         return {s: {"stop_name": "", "arrivals": []} for s in stops}
 
-# ---------- local dev entrypoint ----------
+# -------- Entrypoint --------
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8080))
+    port = int(os.getenv("PORT", "8080"))
     app.run(host="0.0.0.0", port=port)
