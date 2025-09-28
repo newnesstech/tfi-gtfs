@@ -6,7 +6,7 @@ from flask import Flask, jsonify, request, Response
 from flask_cors import CORS
 import yaml
 
-# Try to import local GTFS module (optional)
+# Optional: import local GTFS module if present
 try:
     from gtfs import GTFS
 except Exception:
@@ -20,11 +20,11 @@ DEFAULT_MINUTES = int(os.getenv("MINUTES", "30"))
 app = Flask(__name__)
 CORS(app)
 
-# --- helpers ---
 def require_api_key(fn):
     @wraps(fn)
     def wrapped(*args, **kwargs):
         if API_KEY and request.headers.get("x-api-key") != API_KEY:
+            # Always return HTTP 200 with an envelope, as you’ve been testing for
             return jsonify([{"error": "unauthorized"}, 401]), 200
         return fn(*args, **kwargs)
     return wrapped
@@ -39,7 +39,7 @@ def format_response(fn):
         return jsonify(data)
     return wrapped
 
-# --- lazy GTFS init ---
+# Lazy GTFS init (only if gtfs.py is included and you wire LIVE_URL, etc.)
 _GTFS = None
 def get_gtfs():
     global _GTFS
@@ -55,7 +55,6 @@ def get_gtfs():
         )
     return _GTFS
 
-# --- routes ---
 @app.route("/", methods=["GET"])
 def root():
     return "app is running", 200
@@ -85,6 +84,7 @@ def arrivals():
                 }
         return out
     except Exception:
+        # Fallback shape until GTFS is fully wired
         return {s: {"stop_name": "", "arrivals": []} for s in stops}
 
 if __name__ == "__main__":
