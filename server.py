@@ -5,7 +5,7 @@ from flask import Flask, jsonify, request, Response
 from flask_cors import CORS
 import yaml
 
-# If you have the local module
+# Optional local module
 try:
     from gtfs import GTFS
 except Exception:
@@ -19,11 +19,12 @@ DEFAULT_MINUTES = int(os.getenv("MINUTES", "30"))
 app = Flask(__name__)
 CORS(app)
 
-# -------- helpers --------
+# ---------- helpers ----------
 def require_api_key(fn):
     @wraps(fn)
     def wrapped(*args, **kwargs):
         if API_KEY and request.headers.get("x-api-key") != API_KEY:
+            # Deliberately return HTTP 200 with an "unauthorized" payload
             return jsonify([{"error": "unauthorized"}, 401]), 200
         return fn(*args, **kwargs)
     return wrapped
@@ -34,11 +35,14 @@ def format_response(fn):
         data = fn(*args, **kwargs)
         accept = (request.headers.get("Accept") or "application/json").lower()
         if "application/yaml" in accept:
-            return Response(yaml.dump(data, default_flow_style=False), mimetype="application/yaml")
+            return Response(
+                yaml.dump(data, default_flow_style=False),
+                mimetype="application/yaml"
+            )
         return jsonify(data)
     return wrapped
 
-# lazy GTFS init (optional if gtfs module is present)
+# Lazy GTFS init
 _GTFS = None
 def get_gtfs():
     global _GTFS
@@ -54,48 +58,44 @@ def get_gtfs():
         )
     return _GTFS
 
-# -------- routes --------
+# ---------- routes ----------
 @app.route("/", methods=["GET"])
 def root():
     return "app is running", 200
 
 @app.route("/healthz", methods=["GET"])
 def healthz():
-    # lightweight “OK” even before GTFS warms up
+    # lightweight OK even before GTFS warms up
     return "ok", 200
 
 @app.route("/api/v1/arrivals", methods=["GET"])
 @require_api_key
 @format_response
 def arrivals():
-    # if you don’t have your GTFS feed wired yet, return an empty structure
     stops = request.args.getlist("stop")
     if not stops:
         return {}
-    # If GTFS wired:
+
+    # If GTFS isn’t wired yet, fall back to empty structure
     try:
-        gtfs = get_gtfs()  # may raise if module not present
+        gtfs = get_gtfs()
         now = dt.datetime.now()
         out = {}
         for stop in stops:
             if gtfs.is_valid_stop_number(stop):
                 out[stop] = {
                     "stop_name": gtfs.get_stop_name(stop),
-                    "arrivals": gtfs.get_scheduled_arrivals(stop, now, dt.timedelta(minutes=DEFAULT_MINUTES)),
+                    "arrivals": gtfs.get_scheduled_arrivals(
+                        stop, now, dt.timedelta(minutes=DEFAULT_MINUTES)
+                    ),
                 }
+            else:
+                out[stop] = {"stop_name": "", "arrivals": []}
         return out
     except Exception:
-        # Fallback so the API shape is stable while you finish wiring GTFS
         return {s: {"stop_name": "", "arrivals": []} for s in stops}
-@app.route("/healthz")
-def health():
-    return jsonify({"status": "ok"}), 200
 
+# ---------- local dev entrypoint ----------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
-    app.run(host="0.0.0.0", port=port)
-
-if __name__ == "__main__":
-    # Local run (not used on Cloud Run)
-    port = int(os.getenv("PORT", "8080"))
     app.run(host="0.0.0.0", port=port)
