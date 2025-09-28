@@ -1,5 +1,7 @@
-flask==3.0.3
-flask-cors==4.0.0
-pyyaml==6.0.2
-# If your app imports gtfs.py that sits in the repo, you don’t need a pip line for it.
-# If you have a pip package that provides GTFS, add it here.
+gtfs-realtime-bindings==1.0.0
+flask==2.3.3
+flask_cors==4.0.0
+waitress==2.1.2
+pyyaml==6.0.1
+redis==5.0.0
+protobuf==6.32.1
