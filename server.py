@@ -24,6 +24,7 @@ def require_api_key(fn):
     @wraps(fn)
     def wrapped(*args, **kwargs):
         if API_KEY and request.headers.get("x-api-key") != API_KEY:
+            # keep your “envelope” style
             return jsonify([{"error": "unauthorized"}, 401]), 200
         return fn(*args, **kwargs)
     return wrapped
@@ -82,6 +83,7 @@ def arrivals():
                 }
         return out
     except Exception:
+        # fallback shape if GTFS not wired yet
         return {s: {"stop_name": "", "arrivals": []} for s in stops}
 
 if __name__ == "__main__":
