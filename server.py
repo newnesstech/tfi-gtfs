@@ -87,6 +87,13 @@ def arrivals():
     except Exception:
         # Fallback so the API shape is stable while you finish wiring GTFS
         return {s: {"stop_name": "", "arrivals": []} for s in stops}
+@app.route("/healthz")
+def health():
+    return jsonify({"status": "ok"}), 200
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)
 
 if __name__ == "__main__":
     # Local run (not used on Cloud Run)
