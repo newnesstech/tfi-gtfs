@@ -37,7 +37,8 @@ def index():
 
 # Health check route
 @app.route("/health")
-def health():
+@app.route("/healthz")
+def healthz():
     return jsonify({"status": "ok"}), 200
 
 # API route: arrivals
