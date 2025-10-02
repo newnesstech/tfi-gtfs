@@ -14,35 +14,38 @@ LIVE_URL = (os.getenv("LIVE_URL") or "").strip()   # e.g. https://tfi-gtfs-XXXX.
 USE_FAKE = LIVE_URL == ""                          # fallback to demo data
 
 
+ROLE = (os.getenv("ROLE") or "core").lower()   # "core" or "public"
+LIVE_URL = (os.getenv("LIVE_URL") or "").strip()
+
 def compute_arrivals(stop_id: str, minutes: int):
     """
-    Fetch real arrivals from upstream API if LIVE_URL is set,
-    otherwise return demo values.
+    If ROLE == 'public' and LIVE_URL is set -> proxy upstream /api/v1/arrivals with x-api-key.
+    Otherwise (ROLE == 'core') -> compute locally (for now: demo data).
     """
     if not stop_id:
         return []
 
-    # --- If LIVE_URL set, call upstream ---
-    if LIVE_URL:
+    # PUBLIC: proxy to upstream core
+    if ROLE == "public" and LIVE_URL:
         try:
             url = f"{LIVE_URL}/api/v1/arrivals?stop={stop_id}&minutes={minutes}"
             r = requests.get(url, headers={"x-api-key": API_KEY}, timeout=10)
             if r.status_code == 200:
                 return r.json().get("arrivals", [])
-            else:
-                print("Upstream error:", r.status_code, r.text)
-                return []
+            print("Upstream error:", r.status_code, r.text)
+            return []
         except Exception as e:
             print("Upstream call failed:", e)
             return []
 
-    # --- Fallback demo (if no LIVE_URL) ---
+    # CORE: local compute (replace with your real GTFS logic when ready)
     now = datetime.now(timezone.utc).replace(microsecond=0, second=0)
     return [
         {"route": "9",  "destination": "Charlestown",    "expected": now.isoformat(), "stop_id": stop_id},
         {"route": "16", "destination": "Dublin Airport", "expected": now.isoformat(), "stop_id": stop_id},
         {"route": "68", "destination": "Poolbeg St",     "expected": now.isoformat(), "stop_id": stop_id},
     ]
+
 
     # --- live fetch ---
     try:
