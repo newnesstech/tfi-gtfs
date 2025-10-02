@@ -16,21 +16,33 @@ USE_FAKE = LIVE_URL == ""                          # fallback to demo data
 
 def compute_arrivals(stop_id: str, minutes: int):
     """
-    Returns list of {route, destination, expected(ISO), stop_id}
-    If LIVE_URL is set, proxy the secure endpoint with API key.
-    Otherwise, return demo arrivals.
+    Fetch real arrivals from upstream API if LIVE_URL is set,
+    otherwise return demo values.
     """
     if not stop_id:
         return []
 
-    if USE_FAKE:
-        # --- demo values ---
-        now = datetime.now(timezone.utc).replace(microsecond=0, second=0)
-        return [
-            {"route": "9",  "destination": "Charlestown",    "expected": now.isoformat(), "stop_id": stop_id},
-            {"route": "16", "destination": "Dublin Airport", "expected": now.isoformat(), "stop_id": stop_id},
-            {"route": "68", "destination": "Poolbeg St",     "expected": now.isoformat(), "stop_id": stop_id},
-        ]
+    # --- If LIVE_URL set, call upstream ---
+    if LIVE_URL:
+        try:
+            url = f"{LIVE_URL}/api/v1/arrivals?stop={stop_id}&minutes={minutes}"
+            r = requests.get(url, headers={"x-api-key": API_KEY}, timeout=10)
+            if r.status_code == 200:
+                return r.json().get("arrivals", [])
+            else:
+                print("Upstream error:", r.status_code, r.text)
+                return []
+        except Exception as e:
+            print("Upstream call failed:", e)
+            return []
+
+    # --- Fallback demo (if no LIVE_URL) ---
+    now = datetime.now(timezone.utc).replace(microsecond=0, second=0)
+    return [
+        {"route": "9",  "destination": "Charlestown",    "expected": now.isoformat(), "stop_id": stop_id},
+        {"route": "16", "destination": "Dublin Airport", "expected": now.isoformat(), "stop_id": stop_id},
+        {"route": "68", "destination": "Poolbeg St",     "expected": now.isoformat(), "stop_id": stop_id},
+    ]
 
     # --- live fetch ---
     try:
