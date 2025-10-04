@@ -1,4 +1,10 @@
 import os
+from datetime import datetime, timezone
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+import requests
+
+# -------- helpers --------
 def normalize_stop_id(s: str) -> str:
     """
     Accept short pole codes like '1348' and convert to a full TFI stop_id.
@@ -9,39 +15,33 @@ def normalize_stop_id(s: str) -> str:
     if not s:
         return s
     if s.startswith("8220"):
-        return s  # already a full TFI stop_id
+        return s  # already full TFI stop_id
     if s.isdigit():
         return f"8220DB00{int(s):04d}"
     return s
-from datetime import datetime, timezone
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-import requests
 
+# -------- app setup --------
 app = Flask(__name__)
 CORS(app)
 
-# --- Config ---
 API_KEY = (os.getenv("API_KEY") or "").strip()
 DEFAULT_MINUTES = int(os.getenv("MINUTES", "30"))
-LIVE_URL = (os.getenv("LIVE_URL") or "").strip()   # e.g. https://tfi-gtfs-XXXX.run.app
-USE_FAKE = LIVE_URL == ""                          # fallback to demo data
 
+# mode:
+#   ROLE=public  -> this service proxies to a "core" upstream
+#   ROLE=core    -> this service computes locally (here: demo data placeholder)
+ROLE = (os.getenv("ROLE") or "core").lower()
+LIVE_URL = (os.getenv("LIVE_URL") or "").strip()  # upstream base URL when ROLE=public
 
-ROLE = (os.getenv("ROLE") or "core").lower()   # "core" or "public"
-LIVE_URL = (os.getenv("LIVE_URL") or "").strip()
-
+# -------- core logic --------
 def compute_arrivals(stop_id: str, minutes: int):
-    stop_raw = (request.args.get("stop") or request.args.get("stopId") or "").strip()
-stop = normalize_stop_id(stop_raw)
     """
-    If ROLE == 'public' and LIVE_URL is set -> proxy upstream /api/v1/arrivals with x-api-key.
-    Otherwise (ROLE == 'core') -> compute locally (for now: demo data).
+    Return a list of dicts: [{route, destination, expected (ISO), stop_id}, ...]
     """
     if not stop_id:
         return []
 
-    # PUBLIC: proxy to upstream core
+    # PUBLIC role: proxy to upstream /api/v1/arrivals
     if ROLE == "public" and LIVE_URL:
         try:
             url = f"{LIVE_URL}/api/v1/arrivals?stop={stop_id}&minutes={minutes}"
@@ -54,7 +54,7 @@ stop = normalize_stop_id(stop_raw)
             print("Upstream call failed:", e)
             return []
 
-    # CORE: local compute (replace with your real GTFS logic when ready)
+    # CORE role: local compute (replace with your real GTFS logic later)
     now = datetime.now(timezone.utc).replace(microsecond=0, second=0)
     return [
         {"route": "9",  "destination": "Charlestown",    "expected": now.isoformat(), "stop_id": stop_id},
@@ -62,55 +62,44 @@ stop = normalize_stop_id(stop_raw)
         {"route": "68", "destination": "Poolbeg St",     "expected": now.isoformat(), "stop_id": stop_id},
     ]
 
-
-    # --- live fetch ---
-    try:
-        url = f"{LIVE_URL}/api/v1/arrivals?stop={stop_id}&minutes={minutes}"
-        resp = requests.get(url, headers={"x-api-key": API_KEY}, timeout=10)
-        if resp.status_code == 200:
-            data = resp.json()
-            return data.get("arrivals", [])
-        else:
-            print(f"Upstream error {resp.status_code}: {resp.text}")
-            return []
-    except Exception as e:
-        print(f"Upstream call failed: {e}")
-        return []
-
-
-# --- Routes ---
+# -------- routes --------
 @app.route("/")
 def root():
     return "App is running"
-
 
 @app.route("/health")
 @app.route("/healthz")
 def health():
     return jsonify({"status": "ok"}), 200
 
-
 @app.route("/api/v1/arrivals")
 def secure_arrivals():
-    stop = (request.args.get("stop") or request.args.get("stopId") or "").strip()
-    minutes = int(request.args.get("minutes", DEFAULT_MINUTES))
-    header_key = request.headers.get("x-api-key", "")
-    if not API_KEY or header_key != API_KEY:
-        return jsonify({"error": "unauthorized"}), 401
-    return jsonify({"arrivals": compute_arrivals(stop, minutes)})
-
-
-@app.route("/public/arrivals")
-def public_arrivals():
-    stop = (request.args.get("stop") or request.args.get("stopId") or "").strip()
-    if not stop:
-        return jsonify({"arrivals": []})
+    # normalize the stop id here
+    stop_raw = (request.args.get("stop") or request.args.get("stopId") or "").strip()
+    stop = normalize_stop_id(stop_raw)
     try:
         minutes = int(request.args.get("minutes", DEFAULT_MINUTES))
     except ValueError:
         minutes = DEFAULT_MINUTES
+
+    # API key required
+    header_key = request.headers.get("x-api-key", "")
+    if not API_KEY or header_key != API_KEY:
+        return jsonify({"error": "unauthorized"}), 401
+
     return jsonify({"arrivals": compute_arrivals(stop, minutes)})
 
+@app.route("/public/arrivals")
+def public_arrivals():
+    # normalize the stop id here
+    stop_raw = (request.args.get("stop") or request.args.get("stopId") or "").strip()
+    stop = normalize_stop_id(stop_raw)
+    try:
+        minutes = int(request.args.get("minutes", DEFAULT_MINUTES))
+    except ValueError:
+        minutes = DEFAULT_MINUTES
+
+    return jsonify({"arrivals": compute_arrivals(stop, minutes)})
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "8080"))
