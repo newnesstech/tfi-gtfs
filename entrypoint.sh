@@ -1,30 +1,8 @@
-#!/bin/sh
+#!/usr/bin/env bash
+set -euo pipefail
 
-# Start the first process
-redis-server --dir $DATA_DIR &
-REDIS_PID=$!
+# Cloud Run sets $PORT; default to 8080 for local dev
+PORT="${PORT:-8080}"
 
-cd /app
-source /app/venv/bin/activate
-cmd="python3 server.py --host 0.0.0.0 --redis redis://localhost:6379 $@"
-echo $cmd
-$cmd &
-PID=$!
-
-clean_up() {
-    EXIT_STATUS=$!
-    # Remove our trapped signals.
-    trap - TERM
-    echo "Forwarding signal TERM to redis server $REDIS_PID."
-    kill -TERM $REDIS_PID
-    echo "Forwarding signal TERM to python server $PID."
-    kill -TERM $PID
-    echo "Waiting on $PID to exit."
-    wait $PID
-    echo "Backend server PID $PID stopped with exit code $EXIT_STATUS"
-    echo "Shutting down redis"
-    redis-cli shutdown
-    exit 0
-}
-trap clean_up TERM
-wait $PID
+# Start Waitress serving the Flask app object named "app" in server.py
+exec python -m waitress --listen="0.0.0.0:${PORT}" "server:app"
