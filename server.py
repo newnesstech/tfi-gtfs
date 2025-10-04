@@ -32,6 +32,8 @@ ROLE = (os.getenv("ROLE") or "core").lower()   # "core" or "public"
 LIVE_URL = (os.getenv("LIVE_URL") or "").strip()
 
 def compute_arrivals(stop_id: str, minutes: int):
+    stop_raw = (request.args.get("stop") or request.args.get("stopId") or "").strip()
+stop = normalize_stop_id(stop_raw)
     """
     If ROLE == 'public' and LIVE_URL is set -> proxy upstream /api/v1/arrivals with x-api-key.
     Otherwise (ROLE == 'core') -> compute locally (for now: demo data).
