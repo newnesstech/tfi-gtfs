@@ -1,4 +1,18 @@
 import os
+def normalize_stop_id(s: str) -> str:
+    """
+    Accept short pole codes like '1348' and convert to a full TFI stop_id.
+    Dublin Bus pattern is '8220DB00' + 4-digit, zero-padded.
+    If the caller already passes a full id (starts with 8220), return as-is.
+    """
+    s = (s or "").strip()
+    if not s:
+        return s
+    if s.startswith("8220"):
+        return s  # already a full TFI stop_id
+    if s.isdigit():
+        return f"8220DB00{int(s):04d}"
+    return s
 from datetime import datetime, timezone
 from flask import Flask, request, jsonify
 from flask_cors import CORS
