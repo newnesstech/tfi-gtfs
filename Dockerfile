@@ -1,17 +1,25 @@
-cat > Dockerfile <<'DOCK'
+# Use a small, secure Python base
 FROM python:3.11-slim
 
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
+# System setup (no cache to keep image small)
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
+# Install dependencies first (better layer caching)
 COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Add the app code
 COPY . /app
 
-ENV PORT=8080 PYTHONUNBUFFERED=1
+# Add a tiny entrypoint that reads $PORT and starts Waitress
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Cloud Run will pass PORT; expose for local runs too
 EXPOSE 8080
 
-CMD ["python", "server.py"]
-DOCK
+# Start with Waitress (no shell to keep PID 1 clean)
+CMD ["/entrypoint.sh"]
