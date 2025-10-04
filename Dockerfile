@@ -23,4 +23,3 @@ EXPOSE 8080
 
 # Start with Waitress (no shell to keep PID 1 clean)
 CMD ["/entrypoint.sh"]
-CMD ["python", "-c", "from server import app; from waitress import serve; serve(app, host='0.0.0.0', port=8080)"]
